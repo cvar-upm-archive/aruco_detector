@@ -1,0 +1,13 @@
+/**:
+    ros__parameters:
+      video_device: "/dev/video2"
+      framerate: 30.0
+      io_method: "mmap"
+      frame_id: "camera_link"
+      pixel_format: "mjpeg"
+      image_width: 640
+      image_height: 480
+      camera_name: "aruco_camera"
+      # camera_info_url: "con.yaml"
+
+      
