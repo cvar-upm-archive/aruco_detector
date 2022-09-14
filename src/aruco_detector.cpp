@@ -68,7 +68,7 @@ ArucoDetector::ArucoDetector()
 
 void ArucoDetector::loadParameters()
 {
-
+    std::string aruco_dictionary;
     this->declare_parameter("n_aruco_ids");
     this->declare_parameter("aruco_size");
     this->declare_parameter("camera_model");
@@ -84,7 +84,7 @@ void ArucoDetector::loadParameters()
     RCLCPP_INFO(get_logger(), "Params: n_aruco_ids: %d", n_aruco_ids_);
     RCLCPP_INFO(get_logger(), "Params: aruco_size: %.3f m", aruco_size_);
 
-    aruco_dict_ = cv::aruco::getPredefinedDictionary(cv::aruco::DICT_6X6_250);
+    aruco_dict_ = cv::aruco::getPredefinedDictionary(cv::aruco::DICT_5X5_1000);
 }
 
 void ArucoDetector::setCameraParameters(const sensor_msgs::msg::CameraInfo _camera_info)

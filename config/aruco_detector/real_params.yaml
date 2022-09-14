@@ -1,16 +1,6 @@
 /**:
     ros__parameters:
-        n_aruco_ids: 6
-        aruco_size: 0.175 # meters
-        gate_size: 1.4 # meters
+        n_aruco_ids: 120
+        aruco_size: 0.2 # meters
         camera_model: "pinhole"
-        camera_matrix:
-            rows: 3
-            cols: 3
-            data: [338.76839956, 0.000000, 336.95111308, 0.000000, 338.46896474, 226.73414195, 0.000000, 0.000000, 1.000000]
-        distortion_model: "plumb_bob"
-        distortion_coefficients:
-            rows: 1
-            cols: 14
-            data: [3.77374182e-01,  1.56728184e-02,  9.47366319e-05, -2.62999519e-04 ,2.54889725e-03,  7.33729297e-01,  6.36310732e-02,  8.06026810e-03 ,0.00000000e+00,  0.00000000e+00,  0.00000000e+00,  0.00000000e+00 ,0.00000000e+00 , 0.00000000e+00]
         camera_qos_reliable: true

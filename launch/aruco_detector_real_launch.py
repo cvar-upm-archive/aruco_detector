@@ -23,7 +23,7 @@ def generate_launch_description(ns='drone0'):
     usb_camera = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([PathJoinSubstitution([
             FindPackageShare('usb_camera_interface'),
-            'launch', 'usb_camera_interface_launch.py'
+            'launch', 'new_usb_camera_interface_launch.py'
         ])]),
     )
 
@@ -39,6 +39,7 @@ def generate_launch_description(ns='drone0'):
             output='screen',
             emulate_tty=True,
             remappings=[
-                ("sensor_measurements/camera/image_raw", "sensor_measurements/aruco_camera")]
+                ("sensor_measurements/camera/image_raw", "sensor_measurements/aruco_camera"),
+                ("sensor_measurements/camera/camera_info", "sensor_measurements/aruco_camera/info")]
         ),
     ])
