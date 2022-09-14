@@ -38,7 +38,7 @@ ArucoDetector::ArucoDetector()
     std::string ns = this->get_namespace();
     loadParameters();
 
-    aruco_pose_pub_ = this->create_publisher<nav_msgs::msg::Path>(
+    aruco_pose_pub_ = this->create_publisher<as2_msgs::msg::PoseStampedWithID>(
         this->generate_local_name("aruco_pose"), rclcpp::SensorDataQoS());
     aruco_img_transport_ = std::make_shared<as2::sensors::Camera>(
         "aruco_img_topic", this);
@@ -167,6 +167,38 @@ void ArucoDetector::camerainfoCallback(const sensor_msgs::msg::CameraInfo::Share
     setCameraParameters(*info);
 }
 
+bool ArucoDetector::filterPosition(const cv::Vec3d aruco_position, float max_distance, int n_first_samples){
+    
+    const float alpha = 0.1;
+
+    if (n_samples_ == 0){
+        position_.pose.position.x = aruco_position[0];
+        position_.pose.position.y = aruco_position[1];
+        position_.pose.position.z = aruco_position[2];
+        n_samples_++;
+        return false;
+    }
+    //last_position_ = aruco_position;
+    else {
+        if (n_samples_ < n_first_samples){
+            position_.pose.position.x = position_.pose.position.x * (1 - alpha) + aruco_position[0] * (alpha);
+            position_.pose.position.y = position_.pose.position.y * (1 - alpha) + aruco_position[1] * (alpha);
+            position_.pose.position.z = position_.pose.position.z * (1 - alpha) + aruco_position[2] * (alpha); 
+            n_samples_ ++;
+            return false;
+        }
+        else
+        {
+            //filtro de distancia?
+            position_.pose.position.x = aruco_position[0];
+            position_.pose.position.y = aruco_position[1];
+            position_.pose.position.z = aruco_position[2];
+            
+        }
+    }
+    return true;
+}
+
 void ArucoDetector::imageCallback(const sensor_msgs::msg::Image::SharedPtr img)
 {
     RCLCPP_DEBUG(this->get_logger(), "Image received by callback");
@@ -194,8 +226,13 @@ void ArucoDetector::imageCallback(const sensor_msgs::msg::Image::SharedPtr img)
 
     // detect markers on the fisheye, it's no worth it to detect over the rectified image
     cv::aruco::detectMarkers(cv_ptr->image, aruco_dict_, marker_corners, marker_ids, detector_params, rejected_candidates);
+    if (marker_ids.empty()){
+        if (n_samples_ > 0){
+           n_samples_--; 
+        } 
+    }
     cv::Mat output_image = cv_ptr->image.clone();
-    std::vector<cv::Vec3d> aruco_positions(n_aruco_ids_), aruco_rotations(n_aruco_ids_);
+    cv::Vec3d aruco_position, aruco_rotation;
 
     if (marker_ids.size() > 0)
     {
@@ -206,18 +243,18 @@ void ArucoDetector::imageCallback(const sensor_msgs::msg::Image::SharedPtr img)
         for (int i = 0; i < rvecs.size(); ++i)
         {
             int id = marker_ids[i];
-            RCLCPP_INFO(this->get_logger(), "Marker %d detected", id);
 
-            if (id < n_aruco_ids_ && id >= 0)
+            if (id == goal_id_)
             {
+                RCLCPP_INFO(this->get_logger(), "Marker %d detected", id);
                 cv::Vec3d rvec = rvecs[i];
                 cv::Vec3d tvec = tvecs[i];
                 // cv::Vec3d t_gate;
                 cv::Vec3d rout, tout;
                 // t_gate[0] = -gate_size_ / 2.0f;
                 cv::composeRT(rvec * 0, tvec * 0, rvec, tvec, rout, tout);
-                aruco_positions[id] = tout;
-                aruco_rotations[id] = rout;
+                aruco_position = tout;
+                aruco_rotation = rout;
                 cv::aruco::drawAxis(output_image, camera_matrix_, dist_coeffs_, rout, tout, 0.08625);
             }
         }
@@ -261,28 +298,34 @@ void ArucoDetector::imageCallback(const sensor_msgs::msg::Image::SharedPtr img)
 
     // Publish path
 
-    if (marker_ids.size() > 0)
+    // if (marker_ids.size() > 0)
+    // {
+        //nav_msgs::msg::Path path;
+        //as2_msgs::msg::TrajectoryWaypointsWithID path;
+        //path.header.frame_id = "camera_link";
+        
+    for (int i = 0; i < marker_ids.size(); i++)
     {
-        nav_msgs::msg::Path path;
-        path.header.frame_id = "camera_link";
-        for (int i = 0; i < n_aruco_ids_; i++)
-        {
-            geometry_msgs::msg::PoseStamped pose;
+        int id = marker_ids[i];
+        if (id == goal_id_){
+            filterPosition(aruco_position, max_distance_, n_first_samples_);
+            as2_msgs::msg::PoseStampedWithID pose;
+            pose.id = std::to_string(id);
             pose.header.frame_id = "camera_link";
-            pose.pose.position.x = aruco_positions[i][0];
-            pose.pose.position.y = aruco_positions[i][1];
-            pose.pose.position.z = aruco_positions[i][2];
+            pose.pose.position.x = aruco_position[0];
+            pose.pose.position.y = aruco_position[1];
+            pose.pose.position.z = aruco_position[2];
             tf2::Quaternion rot;
-            rot.setRPY(aruco_rotations[i][2], aruco_rotations[i][0], aruco_rotations[i][1]);
+            rot.setRPY(aruco_rotation[2], aruco_rotation[0], aruco_rotation[1]); // 2, 0, 1 ?? 
             rot = rot.normalize();
             pose.pose.orientation.x = (double)rot.x();
             pose.pose.orientation.y = (double)rot.y();
             pose.pose.orientation.z = (double)rot.z();
             pose.pose.orientation.w = (double)rot.w();
 
-            path.poses.emplace_back(pose);
+            aruco_pose_pub_->publish(pose);
         }
-
-        aruco_pose_pub_->publish(path);
+               //path.poses.emplace_back(pose); 
+        //}    
     }
 };

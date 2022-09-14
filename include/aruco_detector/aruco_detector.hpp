@@ -37,6 +37,8 @@
 #include "as2_core/node.hpp"
 #include "as2_core/sensor.hpp"
 #include "as2_core/names/topics.hpp"
+#include "as2_msgs/msg/trajectory_waypoints_with_id.hpp"
+#include "as2_msgs/msg/pose_stamped_with_id.hpp"
 
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include "nav_msgs/msg/path.hpp"
@@ -66,11 +68,16 @@ public:
 private:
   rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr cam_image_sub_;
   rclcpp::Subscription<sensor_msgs::msg::CameraInfo>::SharedPtr cam_info_sub_;
-  rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr aruco_pose_pub_;
+  rclcpp::Publisher<as2_msgs::msg::PoseStampedWithID>::SharedPtr aruco_pose_pub_;
   std::shared_ptr<as2::sensors::Camera> aruco_img_transport_;
 
   int n_aruco_ids_;
+  int goal_id_ = 75;
+  int n_first_samples_;
+  int n_samples_ = 0;
   float aruco_size_;
+  geometry_msgs::msg::PoseStamped position_;
+  float max_distance_;
   std::string camera_model_;
   std::string distorsion_model_;
   bool camera_qos_reliable_;
@@ -86,6 +93,7 @@ private:
 public:
   void imageCallback(const sensor_msgs::msg::Image::SharedPtr img);
   void camerainfoCallback(const sensor_msgs::msg::CameraInfo::SharedPtr info);
+  bool filterPosition(const cv::Vec3d aruco_position, float max_distance, int n_first_samples);
 };
 
 #endif // ARUCO_DETECTOR_HPP_
