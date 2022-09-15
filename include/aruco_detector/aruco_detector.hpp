@@ -39,7 +39,13 @@
 #include "as2_core/names/topics.hpp"
 #include "as2_msgs/msg/trajectory_waypoints_with_id.hpp"
 #include "as2_msgs/msg/pose_stamped_with_id.hpp"
+#include "as2_core/tf_utils.hpp"
 
+#include <tf2/exceptions.h>
+#include <tf2_ros/buffer.h>
+#include <tf2_ros/static_transform_broadcaster.h>
+#include <tf2_ros/transform_broadcaster.h>
+#include <tf2_ros/transform_listener.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include "nav_msgs/msg/path.hpp"
 #include "sensor_msgs/image_encodings.hpp"
@@ -70,9 +76,14 @@ private:
   rclcpp::Subscription<sensor_msgs::msg::CameraInfo>::SharedPtr cam_info_sub_;
   rclcpp::Publisher<as2_msgs::msg::PoseStampedWithID>::SharedPtr aruco_pose_pub_;
   std::shared_ptr<as2::sensors::Camera> aruco_img_transport_;
+  std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
+  std::shared_ptr<tf2_ros::TransformListener> tf_listener_{nullptr};
+
+  std::string camera_frame_;
+  std::string ref_frame_;
 
   int n_aruco_ids_;
-  int goal_id_ = 75;
+  int goal_id_ = 0;
   int n_first_samples_;
   int n_samples_ = 0;
   float aruco_size_;
@@ -88,12 +99,13 @@ private:
 
   void setCameraInfo(const cv::Mat &_camera_matrix, const cv::Mat &_dist_coeffs);
   void loadParameters();
-  void setCameraParameters(const sensor_msgs::msg::CameraInfo _camera_info);
+  void setCameraParameters(const sensor_msgs::msg::CameraInfo &_camera_info);
 
 public:
   void imageCallback(const sensor_msgs::msg::Image::SharedPtr img);
   void camerainfoCallback(const sensor_msgs::msg::CameraInfo::SharedPtr info);
-  bool filterPosition(const cv::Vec3d aruco_position, float max_distance, int n_first_samples);
+  bool filterPosition(const cv::Vec3d &aruco_position, float max_distance, int n_first_samples);
+  cv::Vec3d convertPositionToRefFrame(const cv::Vec3d &_position, const std::string &_ref_frame);
 };
 
 #endif // ARUCO_DETECTOR_HPP_

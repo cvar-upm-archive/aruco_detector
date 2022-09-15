@@ -4,3 +4,6 @@
         aruco_size: 0.2 # meters
         camera_model: "pinhole"
         camera_qos_reliable: true
+        goal_id: 75
+        camera_frame: "camera_link"
+        ref_frame: "earth"
