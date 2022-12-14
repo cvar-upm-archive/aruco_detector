@@ -16,9 +16,9 @@ else (${benckmark_FOUND})
 
 endif(${benckmark_FOUND})
 
-include(GoogleTest)
+# include(GoogleTest)
 
-enable_testing()
+# enable_testing()
 # find all *.cpp files in the tests directory
 
 file(GLOB TEST_SOURCES tests/*benchmark.cpp )

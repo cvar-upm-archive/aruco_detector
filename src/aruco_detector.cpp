@@ -73,16 +73,18 @@ void ArucoDetector::loadParameters()
 {
     std::string aruco_dictionary;
     std::string camera_frame;
-    this->declare_parameter("n_aruco_ids");
-    this->declare_parameter("aruco_size");
-    this->declare_parameter("camera_model");
-    this->declare_parameter("distortion_model");
-    this->declare_parameter("camera_qos_reliable");
-    this->declare_parameter("ref_frame");
-    this->declare_parameter("camera_frame");
-    this->declare_parameter("goal_id");
+    // this->declare_parameter("n_aruco_ids");
+    this->declare_parameter<float>("aruco_size");
+    this->declare_parameter<std::string>("camera_model");
+    this->declare_parameter<std::string>("distortion_model");
+    this->declare_parameter<bool>("camera_qos_reliable");
+    this->declare_parameter<std::string>("ref_frame");
+    this->declare_parameter<std::string>("camera_frame");
+    this->declare_parameter<int>("goal_id");
+    this->declare_parameter<float>("max_distance");
+    this->declare_parameter<int>("n_first_samples");
 
-    this->get_parameter("n_aruco_ids", n_aruco_ids_);
+    // this->get_parameter("n_aruco_ids", n_aruco_ids_);
     this->get_parameter("aruco_size", aruco_size_);
     this->get_parameter("camera_model", camera_model_);
     this->get_parameter("distortion_model", distorsion_model_);
@@ -90,12 +92,20 @@ void ArucoDetector::loadParameters()
     this->get_parameter("ref_frame", ref_frame_);
     this->get_parameter("camera_frame", camera_frame);
     this->get_parameter("goal_id", goal_id_);
+    this->get_parameter("max_distance", max_distance_);
+    this->get_parameter("n_first_samples", n_first_samples_);
 
     std::string ns = this->get_namespace();
-    camera_frame_ = generateTfName(ns, camera_frame);
+    camera_frame_ = as2::tf::generateTfName(ns, camera_frame);
 
-    RCLCPP_INFO(get_logger(), "Params: n_aruco_ids: %d", n_aruco_ids_);
+    // RCLCPP_INFO(get_logger(), "Params: n_aruco_ids: %d", n_aruco_ids_);
     RCLCPP_INFO(get_logger(), "Params: aruco_size: %.3f m", aruco_size_);
+    RCLCPP_INFO(get_logger(), "Params: goal_id: %d", goal_id_);
+    RCLCPP_INFO(get_logger(), "Params: max_distance_: %.2f", max_distance_);
+    RCLCPP_INFO(get_logger(), "Params: n_first_samples_: %d", n_first_samples_);
+    RCLCPP_INFO(get_logger(), "Params: ref_frame_: %s", ref_frame_.c_str());
+    RCLCPP_INFO(get_logger(), "Params: camera_frame: %s", camera_frame_.c_str());
+    
 
     aruco_dict_ = cv::aruco::getPredefinedDictionary(cv::aruco::DICT_5X5_1000);
 }
@@ -140,7 +150,9 @@ void ArucoDetector::setCameraParameters(const sensor_msgs::msg::CameraInfo &_cam
     }
     if (camera_model_ == "pinhole")
         RCLCPP_INFO(get_logger(), "Using PINHOLE camera model");
-
+    
+    img_encoding_ = sensor_msgs::image_encodings::BGR8; 
+    
     camera_params_available_ = true;
 }
 
@@ -166,7 +178,7 @@ void ArucoDetector::setCameraInfo(const cv::Mat &_camera_matrix, const cv::Mat &
     camera_info.d.emplace_back(_dist_coeffs.at<double>(0, 3));
     camera_info.d.emplace_back(_dist_coeffs.at<double>(0, 4));
 
-    aruco_img_transport_->setParameters(camera_info);
+    aruco_img_transport_->setParameters(camera_info, img_encoding_, camera_model_);
 }
 
 void ArucoDetector::camerainfoCallback(const sensor_msgs::msg::CameraInfo::SharedPtr info)
@@ -202,35 +214,53 @@ bool ArucoDetector::filterPosition(const cv::Vec3d &aruco_position, float max_di
         }
         else
         {
-            //filtro de distancia?
-            position_.pose.position.x = aruco_position[0];
-            position_.pose.position.y = aruco_position[1];
-            position_.pose.position.z = aruco_position[2];
-            
+            Eigen::Vector3d new_position_v(aruco_position[0], aruco_position[1], aruco_position[2]);
+            Eigen::Vector3d curr_position_v(position_.pose.position.x, position_.pose.position.y, position_.pose.position.z);
+
+            float distance = (new_position_v - curr_position_v).norm();
+            std::cout << "Last pose distance " << distance << std::endl;
+            if (distance < max_distance){
+                position_.pose.position.x = aruco_position[0];
+                position_.pose.position.y = aruco_position[1];
+                position_.pose.position.z = aruco_position[2];
+                std::cout << "Sending pose " << distance << std::endl;
+
+            }
+            else
+            {
+                n_samples_ = 0;
+                return false;
+            }
         }
     }
     return true;
 }
 
-cv::Vec3d ArucoDetector::convertPositionToRefFrame(const cv::Vec3d &_position, const std::string &_ref_frame)
+bool ArucoDetector::convertPositionToRefFrame(const cv::Vec3d &_position, cv::Vec3d &_new_position, const std::string &_ref_frame)
 {
-    cv::Vec3d new_position;
 
     try
     {
-    auto pose_transform =
-        tf_buffer_->lookupTransform(_ref_frame, camera_frame_, tf2::TimePointZero);
-    new_position[0] = pose_transform.transform.translation.x;
-    new_position[1] = pose_transform.transform.translation.y;
-    new_position[2] = pose_transform.transform.translation.z;   
-    
+        auto pose_transform =
+            tf_buffer_->lookupTransform(_ref_frame, camera_frame_, tf2::TimePointZero);
+
+        geometry_msgs::msg::Vector3Stamped cam_pos_vs, ref_pos_vs;
+        cam_pos_vs.vector.x = _position[0];
+        cam_pos_vs.vector.y = _position[1];
+        cam_pos_vs.vector.z = _position[2];
+
+        tf2::doTransform(cam_pos_vs, ref_pos_vs, pose_transform);
+        _new_position[0] = ref_pos_vs.vector.x;
+        _new_position[1] = ref_pos_vs.vector.y;
+        _new_position[2] = ref_pos_vs.vector.z;   
     }
     catch (tf2::TransformException &ex)
     {
         RCLCPP_WARN(this->get_logger(), "Transform Failure: %s\n", ex.what()); // Print exception which was caught
+        return false;
     }
 
-    return new_position;
+    return true;
 }
 
 void ArucoDetector::imageCallback(const sensor_msgs::msg::Image::SharedPtr img)
@@ -240,7 +270,7 @@ void ArucoDetector::imageCallback(const sensor_msgs::msg::Image::SharedPtr img)
     cv_bridge::CvImagePtr cv_ptr;
     try
     {
-        cv_ptr = cv_bridge::toCvCopy(img, sensor_msgs::image_encodings::BGR8);
+        cv_ptr = cv_bridge::toCvCopy(img, img_encoding_);
     }
     catch (cv_bridge::Exception &ex)
     {
@@ -341,24 +371,32 @@ void ArucoDetector::imageCallback(const sensor_msgs::msg::Image::SharedPtr img)
     for (int i = 0; i < marker_ids.size(); i++)
     {
         int id = marker_ids[i];
-        if (id == goal_id_){         
-            cv::Vec3d aruco_global_position = convertPositionToRefFrame(aruco_position, ref_frame_);
-            filterPosition(aruco_global_position, max_distance_, n_first_samples_);
-            as2_msgs::msg::PoseStampedWithID pose;
-            pose.id = std::to_string(id);
-            pose.header.frame_id = "camera_link";
-            pose.pose.position.x = aruco_global_position[0];
-            pose.pose.position.y = aruco_global_position[1];
-            pose.pose.position.z = aruco_global_position[2];
-            tf2::Quaternion rot;
-            rot.setRPY(aruco_rotation[2], aruco_rotation[0], aruco_rotation[1]); // 2, 0, 1 ?? 
-            rot = rot.normalize();
-            pose.pose.orientation.x = (double)rot.x();
-            pose.pose.orientation.y = (double)rot.y();
-            pose.pose.orientation.z = (double)rot.z();
-            pose.pose.orientation.w = (double)rot.w();
+        if (id == goal_id_){  
+            std::cout << aruco_position << std::endl;  
+            cv::Vec3d aruco_global_position;     
+            if (!convertPositionToRefFrame(aruco_position, aruco_global_position, ref_frame_))
+            {
+                break;
+            }
+            std::cout << aruco_global_position << std::endl;
+            if (filterPosition(aruco_global_position, max_distance_, n_first_samples_))
+            {
+                as2_msgs::msg::PoseStampedWithID pose;
+                pose.id = std::to_string(id);
+                pose.header.frame_id = camera_frame_;
+                pose.pose.position.x = aruco_global_position[0];
+                pose.pose.position.y = aruco_global_position[1];
+                pose.pose.position.z = aruco_global_position[2];
+                tf2::Quaternion rot;
+                rot.setRPY(aruco_rotation[2], aruco_rotation[0], aruco_rotation[1]); // 2, 0, 1 ?? 
+                rot = rot.normalize();
+                pose.pose.orientation.x = (double)rot.x();
+                pose.pose.orientation.y = (double)rot.y();
+                pose.pose.orientation.z = (double)rot.z();
+                pose.pose.orientation.w = (double)rot.w();
 
-            aruco_pose_pub_->publish(pose);
+                aruco_pose_pub_->publish(pose);
+            }
         }
                //path.poses.emplace_back(pose); 
         //}    

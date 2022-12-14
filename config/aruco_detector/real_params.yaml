@@ -6,4 +6,6 @@
         camera_qos_reliable: true
         goal_id: 75
         camera_frame: "camera_link"
-        ref_frame: "earth"
+        ref_frame: "drone0/base_link"
+        max_distance: 10.0
+        n_first_samples: 5

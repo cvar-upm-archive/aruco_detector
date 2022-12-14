@@ -39,7 +39,7 @@
 #include "as2_core/names/topics.hpp"
 #include "as2_msgs/msg/trajectory_waypoints_with_id.hpp"
 #include "as2_msgs/msg/pose_stamped_with_id.hpp"
-#include "as2_core/tf_utils.hpp"
+#include "as2_core/utils/tf_utils.hpp"
 
 #include <tf2/exceptions.h>
 #include <tf2_ros/buffer.h>
@@ -57,6 +57,7 @@
 #include <image_transport/image_transport.hpp>
 #include <opencv2/aruco.hpp>
 #include <opencv2/calib3d.hpp>
+#include <Eigen/Dense>
 
 class ArucoDetector : public as2::Node
 {
@@ -82,7 +83,7 @@ private:
   std::string camera_frame_;
   std::string ref_frame_;
 
-  int n_aruco_ids_;
+  // int n_aruco_ids_;
   int goal_id_ = 0;
   int n_first_samples_;
   int n_samples_ = 0;
@@ -96,6 +97,7 @@ private:
   cv::Mat camera_matrix_;
   cv::Mat dist_coeffs_;
   cv::Ptr<cv::aruco::Dictionary> aruco_dict_;
+  std::string img_encoding_;
 
   void setCameraInfo(const cv::Mat &_camera_matrix, const cv::Mat &_dist_coeffs);
   void loadParameters();
@@ -105,7 +107,7 @@ public:
   void imageCallback(const sensor_msgs::msg::Image::SharedPtr img);
   void camerainfoCallback(const sensor_msgs::msg::CameraInfo::SharedPtr info);
   bool filterPosition(const cv::Vec3d &aruco_position, float max_distance, int n_first_samples);
-  cv::Vec3d convertPositionToRefFrame(const cv::Vec3d &_position, const std::string &_ref_frame);
+  bool convertPositionToRefFrame(const cv::Vec3d &_position, cv::Vec3d &_new_position, const std::string &_ref_frame);
 };
 
 #endif // ARUCO_DETECTOR_HPP_
